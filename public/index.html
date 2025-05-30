@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Analytics Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 12px 18px;
+            margin: 10px 5px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #get-location {
+            background-color: #2ecc71;
+        }
+        #get-location:hover {
+            background-color: #27ae60;
+        }
+        #status {
+            margin-top: 30px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .status-item {
+            margin: 8px 0;
+            padding: 8px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Web Analytics Demo</h1>
+        <p>This page demonstrates event tracking for the analytics service backend.</p>
+        
+        <div class="controls">
+            <button id="click-me">Simulate Click Event</button>
+            <button id="get-location">Send Location Event</button>
+        </div>
+        
+        <div id="status">
+            <h3>Event Tracking Status</h3>
+            <div class="status-item">
+                Service Worker Status: <strong id="sw-status">Not registered</strong>
+            </div>
+            <div class="status-item">
+                Last Event: <strong id="last-event">None</strong>
+            </div>
+            <div class="status-item">
+                Current User ID: <strong id="user-id">N/A</strong>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Generate or retrieve user ID
+        function getOrCreateUserId() {
+            let userId = sessionStorage.getItem('analytics_user_id');
+            if (!userId) {
+                userId = 'user_' + Math.random().toString(36).substr(2, 9);
+                sessionStorage.setItem('analytics_user_id', userId);
+            }
+            document.getElementById('user-id').textContent = userId;
+            return userId;
+        }
+
+        // Send event to service worker
+        function sendEventToServiceWorker(eventData) {
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'ANALYTICS_EVENT',
+                    payload: eventData
+                });
+                console.log('Event sent to service worker:', eventData);
+                return true;
+            } else {
+                console.warn('Service worker not ready. Event not sent:', eventData);
+                return false;
+            }
+        }
+
+        // DOMContentLoaded event handler
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize user ID
+            const userId = getOrCreateUserId();
+            
+            // Create view event
+            const viewEvent = {
+                user_id: userId,
+                event_type: 'view',
+                payload: {
+                    url: window.location.href,
+                    title: document.title,
+                    referrer: document.referrer || 'direct'
+                }
+            };
+            
+            // Send view event
+            if (sendEventToServiceWorker(viewEvent)) {
+                document.getElementById('last-event').textContent = 'Page view';
+                console.log('View event sent on DOMContentLoaded');
+            }
+        });
+
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        document.getElementById('sw-status').textContent = 'Registered';
+                        console.log('Service Worker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        document.getElementById('sw-status').textContent = 'Registration failed';
+                        console.error('Service Worker registration failed:', error);
+                    });
+            });
+        }
+
+        // Click event handler
+        document.getElementById('click-me').addEventListener('click', () => {
+            const userId = getOrCreateUserId();
+            const clickEvent = {
+                user_id: userId,
+                event_type: 'click',
+                payload: {
+                    element_id: 'click-me',
+                    text: 'Simulate Click Event',
+                    xpath: '//button[@id="click-me"]',
+                    page_url: window.location.href
+                }
+            };
+            
+            if (sendEventToServiceWorker(clickEvent)) {
+                document.getElementById('last-event').textContent = 'Button click';
+            }
+        });
+
+        // Location event handler
+        document.getElementById('get-location').addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+            
+            const userId = getOrCreateUserId();
+            
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const locationEvent = {
+                        user_id: userId,
+                        event_type: 'location',
+                        payload: {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy,
+                            page_url: window.location.href
+                        }
+                    };
+                    
+                    if (sendEventToServiceWorker(locationEvent)) {
+                        document.getElementById('last-event').textContent = 'Location data';
+                    }
+                },
+                error => {
+                    alert(`Error getting location: ${error.message}`);
+                    console.error('Geolocation error:', error);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                }
+            );
+        });
+    </script>
+</body>
+</html>
