@@ -25,3 +25,26 @@ export const getEventCounts = async (req, res) => {
     });
   }
 };
+
+export const getEventCountsByType = async (req, res) => {
+  try {
+    const filters = {
+      start_date: req.query.start_date,
+      end_date: req.query.end_date
+    };
+    
+    const countsByType = await analyticsService.getEventCountsByType(filters);
+    
+    res.status(200).json({
+      status: 'success',
+      data: countsByType
+    });
+    
+  } catch (error) {
+    console.error(`Analytics error: ${error.message}`);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve event counts by type'
+    });
+  }
+};
