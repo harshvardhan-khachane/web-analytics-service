@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import pool from './config/db.js';
 import eventRoutes from './routes/eventRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
 
 // Initialize configuration
 dotenv.config();
@@ -39,6 +40,7 @@ app.get('/db-status', async (req, res, next) => {
 
 // Main API routes
 app.use('/events', eventRoutes);
+app.use('/analytics', analyticsRoutes);
 
 // =====================
 // Error Handling
