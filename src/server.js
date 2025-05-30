@@ -1,18 +1,21 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import pool from './config/db.js';
+import eventRoutes from './routes/eventRoutes.js';
 
-// Load environment variables
+// Initialize configuration
 dotenv.config();
 
-// Create Express application
-const app = express();
-const port = process.env.PORT || 3000;
+// Constants
+const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Express setup
+const app = express();
+
+// Middleware Pipeline
 app.use(express.json());
 
-// Health check endpoint
+// Routes
 app.get('/', (req, res) => {
   res.status(200).json({
     status: 'success',
@@ -21,28 +24,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Start server
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error(`Unhandled Rejection: ${err.message}`);
-  server.close(() => process.exit(1));
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(`Server error: ${err.message}`);
-  res.status(500).json({ 
-    status: 'error',
-    message: 'Internal server error' 
-  });
-});
-
-// Database connection test endpoint
-app.get('/db-status', async (req, res) => {
+app.get('/db-status', async (req, res, next) => {
   try {
     const result = await pool.query('SELECT NOW() AS current_time');
     res.status(200).json({
@@ -51,10 +33,72 @@ app.get('/db-status', async (req, res) => {
       currentTime: result.rows[0].current_time
     });
   } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: 'Database connection failed',
-      error: error.message
-    });
+    next(error); // Pass to error handler
   }
+});
+
+// Main API routes
+app.use('/events', eventRoutes);
+
+// =====================
+// Error Handling
+// =====================
+
+// Catch 404 and forward to error handler
+app.use((req, res, next) => {
+  res.status(404).json({
+    status: 'error',
+    message: 'Endpoint not found'
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('[SERVER ERROR]', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method
+  });
+
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
+    status: 'error',
+    message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// =====================
+// Server Startup
+// =====================
+let server;
+try {
+  server = app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+} catch (startupError) {
+  console.error('Server failed to start:', startupError);
+  process.exit(1);
+}
+
+// =====================
+// Process Cleanup
+// =====================
+const shutdown = (signal) => {
+  console.log(`${signal} received: shutting down gracefully...`);
+  server?.close(() => {
+    pool.end().then(() => {
+      console.log('Database pool closed');
+      process.exit(0);
+    });
+  });
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+  shutdown('unhandledRejection');
 });
